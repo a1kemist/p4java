@@ -13,7 +13,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import com.perforce.p4java.Log;
-import com.perforce.p4java.common.function.FunctionWithException;
 import com.perforce.p4java.core.file.IFileSpec;
 import com.perforce.p4java.exception.AccessException;
 import com.perforce.p4java.exception.ConnectionException;
@@ -99,6 +98,19 @@ public class MoveDelegator extends BaseDelegator implements IMoveDelegator {
                                 fromFile.getPreferredPath().toString(),
                                 toFile.getPreferredPath().toString()
                         },
+                        server),
+                null);
+
+        return buildNonNullObjectListFromCommandResultMaps(resultMaps,
+                rethrowFunction(map -> ResultListBuilder.handleFileReturn(map, server))
+        );
+    }
+
+    @Override
+    public List<IFileSpec> moveFile(@Nullable final MoveFileOptions opts) throws P4JavaException {
+        List<Map<String, Object>> resultMaps = execMapCmdList(MOVE,
+                processParameters(
+                        opts,
                         server),
                 null);
 

@@ -11,6 +11,7 @@ import com.perforce.p4java.exception.NullPointerError;
 import com.perforce.p4java.exception.P4JavaError;
 import com.perforce.p4java.impl.mapbased.rpc.ServerStats;
 import com.perforce.p4java.impl.mapbased.rpc.func.RpcFunctionMapKey;
+import com.perforce.p4java.impl.mapbased.rpc.func.helper.DigestResult;
 import com.perforce.p4java.impl.mapbased.rpc.func.helper.MD5Digester;
 import com.perforce.p4java.impl.mapbased.rpc.packet.RpcPacket;
 import com.perforce.p4java.impl.mapbased.rpc.packet.RpcPacketDispatcher;
@@ -600,7 +601,6 @@ public abstract class RpcConnection {
 		return RpcPacketDispatcher.RpcPacketDispatcherResult.CONTINUE_LOOP;
 	}
 
-
 	public String getDigest(RpcPerforceFileType fileType, File file) {
 		return getDigest(fileType, file, null);
 	}
@@ -645,6 +645,50 @@ public abstract class RpcConnection {
 		String digestStr = digester.digestFileAs32ByteHex(file, digestCharset, convertLineEndings);
 
 		return digestStr;
+	}
+
+	public DigestResult getDigestAndSizeOfFile(RpcPerforceFileType fileType, File file) {
+		if (file == null) {
+			throw new IllegalArgumentException("File is null or does not exist");
+		}
+
+		MD5Digester digester = new MD5Digester();
+
+		Charset digestCharset = null;
+		boolean convertLineEndings = false;
+
+		switch (fileType) {
+			case FST_SYMLINK:
+				String symlinkDigest = getSymlinkMD5Digest(file);
+				return new DigestResult(symlinkDigest, file.length());
+			case FST_UTF16:
+				digestCharset = CharsetDefs.UTF16;
+				break;
+			case FST_UTF8:
+				digestCharset = CharsetDefs.UTF8;
+				convertLineEndings = true;
+				break;
+			case FST_UNICODE:
+				digestCharset = getClientCharset();
+				break;
+			case FST_XTEXT:
+			case FST_TEXT:
+				convertLineEndings = true;
+				break;
+			default:
+				break;
+		}
+
+		// Perform digest and capture adjusted file size
+		String digestStr = digester.digestFileAs32ByteHex(file, digestCharset, convertLineEndings);
+		long fileSize;
+		if (digestStr == null) {
+			fileSize = 0;
+		} else {
+			fileSize = digester.getByteCount();
+		}
+
+		return new DigestResult(digestStr, fileSize);
 	}
 
 	private String getSymlinkMD5Digest(File file) {

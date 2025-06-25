@@ -81,6 +81,7 @@ import static com.perforce.p4java.impl.mapbased.server.Parameters.processParamet
 import static com.perforce.p4java.impl.mapbased.server.cmd.ResultListBuilder.handleFileReturn;
 import static com.perforce.p4java.impl.mapbased.server.cmd.ResultListBuilder.handleIntegrationFileReturn;
 import static com.perforce.p4java.impl.mapbased.server.cmd.ResultMapParser.parseCommandResultMapAsString;
+import static java.util.Objects.isNull;
 
 /**
  * Default implementation of the generic parts of an IClient interface.
@@ -947,7 +948,19 @@ public class Client extends ClientSummary implements IClient {
 
 		List<IFileSpec> resultList = new ArrayList<>();
 
-		List<Map<String, Object>> resultMaps = this.serverImpl.execMapCmdList(CmdSpec.UNDO, Parameters.processParameters(opts, fileSpecs, null, false, this.serverImpl), null);
+		boolean annotateFiles = false;
+
+		for (IFileSpec fileSpec : fileSpecs) {
+			if (fileSpec == null)
+				continue;
+
+			if (fileSpec.getLabel() == null)
+				continue;
+
+			annotateFiles = true;
+		}
+
+		List<Map<String, Object>> resultMaps = this.serverImpl.execMapCmdList(CmdSpec.UNDO, Parameters.processParameters(opts, fileSpecs, null, annotateFiles, this.serverImpl), null);
 
 		if (resultMaps != null) {
 			for (Map<String, Object> map : resultMaps) {
@@ -1646,6 +1659,14 @@ public class Client extends ClientSummary implements IClient {
 		}
 
 		this.serverImpl.execStreamingMapCommand(CmdSpec.RECONCILE.toString(), Parameters.processParameters(opts, fileSpecs, this.serverImpl), null, callback, key);
+	}
+
+	/**
+	 * @see com.perforce.p4java.client.IClient#reconcileFiles(java.util.List, com.perforce.p4java.option.client.ReconcileFilesOptions)
+	 */
+	@Override
+	public List<IFileSpec> reconcileFiles(ReconcileFilesOptions opts) throws P4JavaException {
+		return reconcileFiles(null, opts);
 	}
 
 	/**

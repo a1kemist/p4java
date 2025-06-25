@@ -18,9 +18,9 @@ import java.util.List;
 public class MoveFileOptions extends Options {
 
 	/**
-	 * Options: -c[changelist], -n, -f, -t[type], -k
+	 * Options: -c[changelist], -n, -f, -t[type], -k, -M [--parallel=N]
 	 */
-	public static final String OPTIONS_SPECS = "i:c:clz b:n b:f b:k s:t";
+	public static final String OPTIONS_SPECS = "i:c:clz b:n b:f b:k s:t b:M i:-parallel:gtz";
 
 	/**
 	 * If not IChangelist.UNKNOWN, the files are opened in the numbered
@@ -58,6 +58,22 @@ public class MoveFileOptions extends Options {
 	 * to the -t flag.
 	 */
 	protected String fileType = null;
+
+	/**
+	 * If true, the list of files to be opened includes both adds and deletes,
+	 * 	allowing the missing and added files to be compared and
+	 * 	converted to pairs of move/delete and move/add operations if they
+	 * 	are similar enough. Corresponds to the '-M' flag.
+	 */
+	protected boolean moveMatch = false;
+
+	/**
+	 * 	The --parallel flag when used with the -M flag specifies the number
+	 * 	of files opened for add to be compared simultaneously on the client
+	 * 	to the file opened for delete to improve the performance of the move
+	 * 	matching.
+	 */
+	protected int parallel = 0;
 
 	/**
 	 * Default constructor.
@@ -111,7 +127,7 @@ public class MoveFileOptions extends Options {
 	 * @see com.perforce.p4java.option.Options#processOptions(com.perforce.p4java.server.IServer)
 	 */
 	public List<String> processOptions(IServer server) throws OptionsException {
-		this.optionList = this.processFields(OPTIONS_SPECS, this.getChangelistId(), this.isListOnly(), this.isForce(), this.isNoClientMove(), this.getFileType());
+		this.optionList = this.processFields(OPTIONS_SPECS, this.getChangelistId(), this.isListOnly(), this.isForce(), this.isNoClientMove(), this.getFileType(), this.isMoveMatch(), this.getParallel());
 		return this.optionList;
 	}
 
@@ -157,6 +173,24 @@ public class MoveFileOptions extends Options {
 
 	public MoveFileOptions setFileType(String fileType) {
 		this.fileType = fileType;
+		return this;
+	}
+
+	public boolean isMoveMatch() {
+		return moveMatch;
+	}
+
+	public MoveFileOptions setMoveMatch(boolean moveMatch) {
+		this.moveMatch = moveMatch;
+		return this;
+	}
+
+	public int getParallel() {
+		return parallel;
+	}
+
+	public MoveFileOptions setParallel(int parallel) {
+		this.parallel = parallel;
 		return this;
 	}
 }

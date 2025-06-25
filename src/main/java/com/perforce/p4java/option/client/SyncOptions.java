@@ -15,20 +15,28 @@ import java.util.List;
 public class SyncOptions extends Options {
 
 	/**
-	 * Options: -f, -n, -k, -p, -q, -s
+	 * Options: -f, -n, -p, -q, -s, -k --sync-time=N
 	 */
-	public static final String OPTIONS_SPECS = "b:f b:n b:k b:p b:q b:s";
+	public static final String OPTIONS_SPECS = "b:f b:n b:k b:p b:q b:s l:-sync-time:gez";
 
-	/** If true, force the update (corresponds to p4 -f flag) */
+	/**
+	 * If true, force the update (corresponds to p4 -f flag)
+	 */
 	protected boolean forceUpdate = false; // -f
 
-	/** If true, don't actually do the update (corresponds to p4 -n flag) */
+	/**
+	 * If true, don't actually do the update (corresponds to p4 -n flag)
+	 */
 	protected boolean noUpdate = false;        // -n
 
-	/** If true, bypass the client (corresponds to p4 -k flag) */
+	/**
+	 * If true, bypass the client (corresponds to p4 -k flag)
+	 */
 	protected boolean clientBypass = false;    // -k
 
-	/** If true, bypass the server (corresponds to p4 -p flag) */
+	/**
+	 * If true, bypass the server (corresponds to p4 -p flag)
+	 */
 	protected boolean serverBypass = false;    // -p
 
 	/**
@@ -43,6 +51,12 @@ public class SyncOptions extends Options {
 	 * workspace (corresponds to p4 -s flag)
 	 */
 	protected boolean safetyCheck = false; // -s
+
+	/**
+	 * It specifies the file modification time to be set when
+	 * updating the server metadata with the -k flag.
+	 */
+	protected long syncTime = -1L;
 
 	/**
 	 * Default constructor.
@@ -113,7 +127,7 @@ public class SyncOptions extends Options {
 	 */
 	@Override
 	public List<String> processOptions(IServer server) throws OptionsException {
-		this.optionList = this.processFields(OPTIONS_SPECS, this.forceUpdate, this.noUpdate, this.clientBypass, this.serverBypass, this.quiet, this.safetyCheck);
+		this.optionList = this.processFields(OPTIONS_SPECS, this.forceUpdate, this.noUpdate, this.clientBypass, this.serverBypass, this.quiet, this.safetyCheck, this.syncTime);
 		return this.optionList;
 	}
 
@@ -168,6 +182,15 @@ public class SyncOptions extends Options {
 
 	public SyncOptions setSafetyCheck(boolean safetyCheck) {
 		this.safetyCheck = safetyCheck;
+		return this;
+	}
+
+	public long getSyncTime() {
+		return syncTime;
+	}
+
+	public SyncOptions setSyncTime(long syncTime) {
+		this.syncTime = syncTime;
 		return this;
 	}
 }

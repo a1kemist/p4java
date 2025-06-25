@@ -5,10 +5,17 @@ package com.perforce.p4java.impl.mapbased.rpc.func.client;
 
 import com.perforce.p4java.Log;
 import com.perforce.p4java.PropertyDefs;
+import com.perforce.p4java.diff.DiffAnalyze;
+import com.perforce.p4java.diff.DiffFlags;
+import com.perforce.p4java.diff.DigestTree;
+import com.perforce.p4java.diff.Sequence;
+import com.perforce.p4java.diff.Snake;
+import com.perforce.p4java.diff.StrStr;
 import com.perforce.p4java.exception.ConnectionException;
 import com.perforce.p4java.exception.MessageGenericCode;
 import com.perforce.p4java.exception.MessageSeverityCode;
 import com.perforce.p4java.exception.NullPointerError;
+import com.perforce.p4java.exception.ProtocolError;
 import com.perforce.p4java.impl.mapbased.rpc.CommandEnv;
 import com.perforce.p4java.impl.mapbased.rpc.CommandEnv.RpcHandler;
 import com.perforce.p4java.impl.mapbased.rpc.RpcPropertyDefs;
@@ -36,11 +43,16 @@ import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -97,6 +109,9 @@ public class ClientSystemFileMatchCommands {
 		String fromFile = (String) resultsMap.get(RpcFunctionMapKey.FROM_FILE);
 		String key = (String) resultsMap.get(RpcFunctionMapKey.KEY);
 		String flags = (String) resultsMap.get(RpcFunctionMapKey.DIFF_FLAGS);
+		String threads = (String) resultsMap.get(RpcFunctionMapKey.THREADS);
+		String fileType = (String) resultsMap.get(RpcFunctionMapKey.TYPE);
+		String matchlines = (String) resultsMap.get(RpcFunctionMapKey.MATCHLINES);
 
 		if (fromFile == null || key == null) {
 			throw new NullPointerException("Missing fromFile or key");
@@ -106,6 +121,9 @@ public class ClientSystemFileMatchCommands {
 		cfile.getMatchDict().put(RpcFunctionMapKey.KEY, key);
 		if (flags != null) {
 			cfile.getMatchDict().put(RpcFunctionMapKey.DIFF_FLAGS, flags);
+		}
+		if (fileType != null) {
+			cfile.getMatchDict().put(RpcFunctionMapKey.TYPE, fileType);
 		}
 
 		for (int i = 0; ; i++) {
@@ -117,10 +135,16 @@ public class ClientSystemFileMatchCommands {
 			cfile.getMatchDict().put(RpcFunctionMapKey.INDEX + i, index);
 			cfile.getMatchDict().put(RpcFunctionMapKey.TO_FILE + i, file);
 		}
+
+		if (threads != null) {
+			cfile.getMatchDict().put(RpcFunctionMapKey.THREADS, threads);
+		}
+		if (matchlines != null) {
+			cfile.getMatchDict().put(RpcFunctionMapKey.MATCHLINES, matchlines);
+		}
 	}
 
 	void closeMatch(RpcConnection rpcConnection, CommandEnv cmdEnv, Map<String, Object> resultsMap, ClientFile cfile) throws ConnectionException {
-
 		if (rpcConnection == null) {
 			throw new NullPointerError("Null rpcConnection in convertFile().");
 		}
@@ -130,88 +154,104 @@ public class ClientSystemFileMatchCommands {
 		if (resultsMap == null) {
 			throw new NullPointerError("Null resultsMap in convertFile().");
 		}
+		if (cfile == null) {
+			return;
+		}
+		if (cfile.getMatchDict().isEmpty()) {
+			return;
+		}
 
-		// Follow on from clientCloseFile, not called by server directly.
+		String diffFlags = cfile.getMatchDict().get(RpcFunctionMapKey.DIFF_FLAGS);
+		String fromFilePath = cfile.getMatchDict().get(RpcFunctionMapKey.FROM_FILE);
+		String type = cfile.getMatchDict().get(RpcFunctionMapKey.TYPE);
+		String matchlines = cfile.getMatchDict().get(RpcFunctionMapKey.MATCHLINES);
+		int threads = Integer.parseInt(cfile.getMatchDict().get(RpcFunctionMapKey.THREADS));
 
-		// Compare temp file to existing client files.  Figure out the
-		// best match, along with a quantitative measure of how good
-		// the match was (lines matched vs total lines).  Stash it
-		// in the handle so clientAckMatch can report it back.
+		int maxThreads = 32;
+		threads = Math.min(Math.max(threads, 1), maxThreads);
 
-		//String matchFile = null;
-		//String matchIndex = null;
+		ReconcileHandle recHandle = getReconcileHandle(cmdEnv);
+		DigestTree fileSet = recHandle.getDigestTree();
+		ExecutorService executor = Executors.newFixedThreadPool(threads);
+		List<Future<Map.Entry<Integer, Integer>>> futures = new ArrayList<>();
 
-	    /* XXX: still to port
-	    String fname = null;
-	    FileSys *f2 = 0;
-	    DiffFlags flags;
-	    
-	    String diffFlags = cfile.getMatchDict().get( RpcFunctionMapKey.DIFF_FLAGS );
-	    if (diffFlags != null) {
-	        flags.Init( diffFlags );
-	    }
+		try (Sequence sequence_fromFile = new Sequence(new RpcPerforceFile(fromFilePath, type), cmdEnv.getServer().getClientCharset(), new DiffFlags(diffFlags));) {
+			int totalLines = sequence_fromFile.Lines();
+			int matchPct = matchlines != null ? Integer.parseInt(matchlines) : 0;
+			int linesLower = (matchPct * totalLines) / 100;
+			int linesUpper = (matchPct != 0) ? ((totalLines * 100) / matchPct) : 0;
 
-	    int bestNum = 0;
-	    int bestSame = 0; 
-	    int totalLines = 0;
+			for (int i = 0; (cfile.getMatchDict().get(RpcFunctionMapKey.TO_FILE + i) != null); i++) {
+				final int index = i;
+				String matchIndex = cfile.getMatchDict().get(RpcFunctionMapKey.INDEX + index);
+				if (matchIndex != null && recHandle.alreadyMatched(Integer.valueOf(matchIndex)))
+					continue;
 
-	    for( int i = 0 ; 
-	         fname = cfile.getMatchDict().get( RpcFunctionMapKey.TO_FILE + i ) ;
-	         i++ ) {
-	        delete f2;
+				String toFile = cfile.getMatchDict().get(RpcFunctionMapKey.TO_FILE + index);
+				RpcPerforceFileType fileType = RpcPerforceFileType.decodeFromServerString(type);
+				String digestStr = digestFile(new File(toFile), fileType, rpcConnection.getClientCharset());
+				StrStr fileNameDigest = new StrStr(toFile, digestStr);
+				if (fileSet.contains(fileNameDigest))
+					continue;
+				else
+					fileSet.putIfAbsent(fileNameDigest);
 
-	        f2 = client->GetUi()->File( f1->file->GetType() );
-	        f2->SetContentCharSetPriv( f1->file->GetContentCharSetPriv() );
-	        f2->Set( *fname );
+				// Threading
+				futures.add(
+						executor.submit(() -> {
+							int same = 0;
+							try (Sequence sequence_toFile = new Sequence(new RpcPerforceFile(toFile, type), cmdEnv.getServer().getClientCharset(), new DiffFlags(diffFlags))) {
+								if ((linesLower == 0 || linesUpper == 0) ||
+										(sequence_toFile.Lines() >= linesLower && sequence_toFile.Lines() <= linesUpper)) {
+									same = diffMatchFiles(
+											sequence_toFile,
+											sequence_fromFile,
+											new DiffFlags(diffFlags),
+											fromFilePath,
+											cmdEnv.getServer().getClientCharset(),
+											type
+									);
+								}
+							} catch (Exception e) {
+								//throw new ConnectionException(e);
+							}
+							return new AbstractMap.SimpleEntry<>(Integer.valueOf(index), same);
+						})
+				);
+			}
+			executor.shutdown();
 
-	        if( e->Test() || !f2 ) {
-    	        // don't care
-    	        e->Clear();
-    	        continue;
-	        }
+			int bestSame = 0;
+			int bestNum = 0;
+			for (Future<Map.Entry<Integer, Integer>> future : futures) {
+				Map.Entry<Integer, Integer> entry = future.get();
+				if (entry != null) {
+					if (entry.getValue() > bestSame) {
+						bestSame = entry.getValue();
+						bestNum = entry.getKey();
+					}
+				}
+			}
 
-	        Sequence s1( f1->file, flags, e );
-	        Sequence s2( f2,       flags, e );
-	        if ( e->Test() )
-	        {
-    	        // still don't care
-    	        e->Clear();
-    	        continue;
-	        }
+			if (bestSame != 0) {
+				cfile.getMatchDict().put(RpcFunctionMapKey.INDEX,
+						cfile.getMatchDict().get(RpcFunctionMapKey.INDEX.toString() + bestNum));
+				cfile.getMatchDict().put(RpcFunctionMapKey.TO_FILE,
+						cfile.getMatchDict().get(RpcFunctionMapKey.TO_FILE.toString() + bestNum));
+				cfile.getMatchDict().put(RpcFunctionMapKey.LOWER, String.valueOf(bestSame));
+				cfile.getMatchDict().put(RpcFunctionMapKey.UPPER, String.valueOf(totalLines));
+			}
+			sequence_fromFile.deleteFile(); // tmp file deletion
 
-	        DiffAnalyze diff( &s1, &s2 );
-
-	        int same = 0;
-	        for( Snake *s = diff.GetSnake() ; s ; s = s->next ) {
-    	        same += ( s->u - s->x );
-    	        if( s->u > totalLines ) {
-    	            totalLines = s->u;
-    	        }
-	        }
-
-	        if( same > bestSame )
-	        {
-    	        bestNum = i;
-    	        bestSame = same;
-	        }
-	    }
-
-	    delete f2;
-	    f1->file->Close( e );
-
-	    totalLines++; // snake lines start at zero
-
-	    if( bestSame != 0 ) {
-	        cfile.getMatchDict().put( RpcFunctionMapKey.INDEX,
-	                cfile.getMatchDict().get( RpcFunctionMapKey.INDEX.toString() + bestNum ) );
-	        cfile.getMatchDict().put( RpcFunctionMapKey.TO_FILE,
-	                cfile.getMatchDict().get( RpcFunctionMapKey.TO_FILE.toString() + bestNum ) );
-	        
-	        cfile.getMatchDict().put( RpcFunctionMapKey.LOWER, bestSame );
-	        cfile.getMatchDict().put( RpcFunctionMapKey.UPPER, totalLines );
-	    }
-*/
-		// clientAckMatch will send this back
+			String clientHandle = (String) resultsMap.get(RpcFunctionMapKey.HANDLE);
+			RpcHandler handler = cmdEnv.getHandler(clientHandle);
+			Path pathParent = Path.of(cfile.getFile().getParent());
+			if( handler.isTmpDirCreated() && Files.list(pathParent).count() == 0 ) {
+				Files.delete(pathParent); // tmp directory delete
+			}
+		} catch (Exception e) {
+			throw new ConnectionException("Exception in close match function : " + e);
+		}
 	}
 
 	protected RpcPacketDispatcherResult ackMatch(RpcConnection rpcConnection, CommandEnv cmdEnv, Map<String, Object> resultsMap) throws ConnectionException {
@@ -242,6 +282,7 @@ public class ClientSystemFileMatchCommands {
 		String index = cfile.getMatchDict().get(RpcFunctionMapKey.INDEX);
 		String lower = cfile.getMatchDict().get(RpcFunctionMapKey.LOWER);
 		String upper = cfile.getMatchDict().get(RpcFunctionMapKey.UPPER);
+		String matchlines = cfile.getMatchDict().get(RpcFunctionMapKey.MATCHLINES);
 
 		if (fromFile != null && key != null) {
 			resultsMap.put(RpcFunctionMapKey.FROM_FILE, fromFile);
@@ -255,6 +296,14 @@ public class ClientSystemFileMatchCommands {
 			resultsMap.put(RpcFunctionMapKey.INDEX, index);
 			resultsMap.put(RpcFunctionMapKey.LOWER, lower);
 			resultsMap.put(RpcFunctionMapKey.UPPER, upper);
+
+			ReconcileHandle recHandle = getReconcileHandle(cmdEnv);
+			if (recHandle != null && matchlines != null) {
+				int matchPct = (100 * Integer.parseInt(lower)) / Integer.parseInt(upper);
+				if (matchPct >= Integer.parseInt(matchlines)) {
+					recHandle.setMatch(Integer.parseInt(index));
+				}
+			}
 		}
 
 		rpcConnection.clientConfirm(confirm, resultsMap);
@@ -295,6 +344,8 @@ public class ClientSystemFileMatchCommands {
 		String digest = (String) resultsMap.get(RpcFunctionMapKey.DIGEST);
 		String confirm = (String) resultsMap.get(RpcFunctionMapKey.CONFIRM);
 
+		ReconcileHandle recHandle = getReconcileHandle(cmdEnv);
+
 		if (confirm == null) {
 			throw new NullPointerError("No confirm value.");
 		}
@@ -303,8 +354,12 @@ public class ClientSystemFileMatchCommands {
 		String matchIndex = null;
 
 		for (int i = 0; resultsMap.containsKey(RpcFunctionMapKey.TO_FILE + i); i++) {
+			matchFile = (String) resultsMap.get(RpcFunctionMapKey.TO_FILE + i);
+			matchIndex = (String) resultsMap.get(RpcFunctionMapKey.INDEX + i);
+			if (matchIndex != null && recHandle.alreadyMatched(Integer.valueOf(matchIndex)))
+				continue;
 
-			File f = new File((String) resultsMap.get(RpcFunctionMapKey.TO_FILE + i));
+			File f = new File(matchFile);
 			RpcPerforceFileType fileType = RpcPerforceFileType.decodeFromServerString(clientType);
 			// If we encounter a problem with a file, we just don't return
 			// it as a match.  No need to blat out lots of errors.
@@ -320,8 +375,7 @@ public class ClientSystemFileMatchCommands {
 				continue;
 			}
 
-			String localDigest = digestFile(f, fileType, rpcConnection.getClientCharset());
-
+			String localDigest = recHandle.getDigest(matchFile, digestFile(f, fileType, rpcConnection.getClientCharset()));
 			if (localDigest == null) {
 				continue;
 			}
@@ -329,7 +383,8 @@ public class ClientSystemFileMatchCommands {
 			if (!localDigest.equals(digest)) {
 				matchFile = (String) resultsMap.get(RpcFunctionMapKey.TO_FILE + i);
 				matchIndex = (String) resultsMap.get(RpcFunctionMapKey.INDEX + i);
-				break; // doesn't get any better
+				recHandle.setMatch(Integer.valueOf(matchIndex));
+				break;
 			}
 		}
 
@@ -489,6 +544,8 @@ public class ClientSystemFileMatchCommands {
 		String skipIgnore = (String) resultsMap.get(RpcFunctionMapKey.SKIP_IGNORE);
 		String skipCurrent = (String) resultsMap.get(RpcFunctionMapKey.SKIP_CURRENT);
 		String sendDigest = (String) resultsMap.get(RpcFunctionMapKey.SEND_DIGEST);
+		String sendFileSize = (String) resultsMap.get(RpcFunctionMapKey.SEND_FILESIZE);
+		String sendType = (String) resultsMap.get(RpcFunctionMapKey.SEND_TYPE);
 
 		if (dir == null) {
 			throw new NullPointerError("Null 'dir' in resultsMap in reconcileAdd().");
@@ -502,6 +559,8 @@ public class ClientSystemFileMatchCommands {
 		boolean isSkipIgnore = (skipIgnore != null && !skipIgnore.equalsIgnoreCase("0")) ? true : false;
 		boolean isSkipCurrent = (skipCurrent != null && !skipCurrent.equalsIgnoreCase("0")) ? true : false;
 		boolean isSendDigest = (sendDigest != null && !sendDigest.equalsIgnoreCase("0")) ? true : false;
+		boolean isSendFileSize = (sendFileSize != null && !sendFileSize.equalsIgnoreCase("0")) ? true : false;
+		boolean isSendType = (sendType != null && !sendType.equalsIgnoreCase("0")) ? true : false;
 
 		MapTable map = new MapTable();
 		List<String> files = new LinkedList<String>();
@@ -509,6 +568,7 @@ public class ClientSystemFileMatchCommands {
 		List<String> dirs = new LinkedList<String>();
 		List<String> depotFiles = new LinkedList<String>();
 		Map<String, String> digests = new HashMap<String, String>();
+		Map<String, String> types = new HashMap<String, String>();
 
 		// Construct a MapTable object from the strings passed in by server
 
@@ -534,15 +594,10 @@ public class ClientSystemFileMatchCommands {
 		// we need to have this list of depot files for computing files
 		// and directories to add (even if it is an empty list).
 
-		ReconcileHandle recHandle = null;
-		RpcHandler handler = cmdEnv.getHandler(RECONCILE_HANDLE);
-		if (handler != null) {
+		ReconcileHandle reconcileHandle = getReconcileHandle(cmdEnv);
+		if (reconcileHandle != null) {
 			//TODO: Do we need to sort the paths?
 			//recHandle->pathArray->Sort( !StrBuf::CaseUsage() );
-		} else if (handler == null && isSummary) {
-			handler = cmdEnv.new RpcHandler(RECONCILE_HANDLE, false, null);
-			cmdEnv.addHandler(handler);
-			recHandle = new ReconcileHandle(handler);
 		}
 
 		// status -s also needs the list of files opened for add appended
@@ -552,8 +607,8 @@ public class ClientSystemFileMatchCommands {
 			for (int j = 0; resultsMap.containsKey(RpcFunctionMapKey.DEPOT_FILES + j); j++) {
 				depotFiles.add((String) resultsMap.get(RpcFunctionMapKey.DEPOT_FILES + j));
 			}
-			if (recHandle != null) {
-				for (String fname : recHandle.getSkipFiles()) {
+			if (reconcileHandle != null) {
+				for (String fname : reconcileHandle.getSkipFiles()) {
 					depotFiles.add(fname);
 				}
 			}
@@ -574,41 +629,52 @@ public class ClientSystemFileMatchCommands {
 			AtomicInteger ddx = new AtomicInteger(0);
 			traverseShort(resultsMap, new File(dir), new File(dir), isTraverse, isSkipIgnore, true, false, isSkipCurrent, map, files, dirs, idx, depotFiles, ddx, rpcConnection.isUnicodeServer(), rpcConnection.getClientCharset(), cmdEnv);
 		} else {
-			traverseDirs(new File(dir), isTraverse, isSkipIgnore, isSendDigest, map, files, sizes, digests, hasIndex, recHandle != null ? recHandle.getSkipFiles() : null, rpcConnection.isUnicodeServer(), rpcConnection.getClientCharset(), cmdEnv);
+			traverseDirs(new File(dir), isTraverse, isSkipIgnore, isSendDigest, isSendType, map, files, sizes, digests, types, hasIndex, reconcileHandle != null ? reconcileHandle.getSkipFiles() : null, rpcConnection.isUnicodeServer(), rpcConnection.getClientCharset(), cmdEnv);
 		}
 
 		// Compare list of files on client with list of files in the depot
 		// if we have this list from ReconcileEdit. Skip this comparison
 		// if summary because it was done already.
 
+		Map<String, Object> cacheOriginalResultMap = new HashMap<>(resultsMap);
 		int j = 0;
-		if (recHandle != null && !isSummary) {
+		if (reconcileHandle != null && !isSummary) {
 			for (String file : files) {
-				if (recHandle.getSkipFiles().contains(file)) {
+				if (reconcileHandle.getSkipFiles().contains(file)) {
 					continue;
 				}
 
 				resultsMap.put(RpcFunctionMapKey.FILE + j, file);
 
-				if (!isSendDigest && recHandle.getDelCount() > 0) {
+				if (isSendFileSize || (!isSendDigest && reconcileHandle.getDelCount() > 0)) {
 					// Deleted files?  Send filesize info so the
 					// server can try to pair up moves.
-
 					resultsMap.put(RpcFunctionMapKey.FILESIZE + j, "" + sizes.get(file));
 				}
 				if (isSendDigest) {
 					resultsMap.put(RpcFunctionMapKey.DIGEST + j, digests.get(file));
 				}
+				if (isSendType) {
+					resultsMap.put(RpcFunctionMapKey.TYPE + j, types.get(file));
+				}
 				j++;
+				if ((j) % 1000 == 0) {
+					rpcConnection.clientConfirm(confirm, resultsMap);
+					resultsMap.clear();
+					resultsMap.putAll(cacheOriginalResultMap);
+					j = 0;
+				}
 			}
 		} else {
 			for (String file : files) {
 				resultsMap.put(RpcFunctionMapKey.FILE + j, file);
-
-				if (isSendDigest) {
-					resultsMap.put(RpcFunctionMapKey.DIGEST + j, digests.get(file));
-				}
 				j++;
+				if ((j) % 1000 == 0) {
+					rpcConnection.clientConfirm(confirm, resultsMap);
+					resultsMap.clear();
+					resultsMap.putAll(cacheOriginalResultMap);
+					j = 0;
+				}
 			}
 		}
 
@@ -647,6 +713,61 @@ public class ClientSystemFileMatchCommands {
 	}
 
 	/**
+	 * Set the file and respective file values to corresponding maps
+	 *
+	 * @param file
+	 * @param skipIgnore
+	 * @param sendDigest
+	 * @param sendType
+	 * @param charset
+	 * @param cmdEnv
+	 * @param addFilesMap
+	 * @param sizes
+	 * @param digests
+	 * @param types
+	 */
+	private void setDigestOrType(File file, boolean skipIgnore, boolean sendDigest, boolean sendType, Charset charset,
+								 CommandEnv cmdEnv, List<String> addFilesMap, Map<String, Long> sizes,
+								 Map<String, String> digests, Map<String, String> types) {
+		if (!skipIgnore && isIgnore(file, charset, cmdEnv)) {
+			return;
+		}
+
+		String fileName = file.getAbsolutePath();
+
+		addFilesMap.add(fileName);
+		sizes.put(fileName, file.length());
+
+		RpcPerforceFileType fileType = RpcPerforceFileType.inferFileType(file, -1,
+				cmdEnv.getRpcConnection().isUnicodeServer(),
+				cmdEnv.getRpcConnection().getClientCharset());
+		if (sendType) {
+			int serverXLevel = 0;
+			String serverXLevelStr = (String) cmdEnv.getServerProtocolSpecsMap().get("xfiles");
+			if (serverXLevelStr != null) {
+				try {
+					serverXLevel = Integer.parseInt(serverXLevelStr);
+				} catch (NumberFormatException nfe) {
+					throw new ProtocolError("Unexpected number conversion exception in checkFile: " +
+							nfe.getLocalizedMessage(), nfe);
+				}
+			}
+
+			RpcPerforceFileType.RpcServerTypeStringSpec spec = RpcPerforceFileType.getServerFileTypeString(
+					fileName, false, fileType, null, serverXLevel);
+
+			types.put(fileName, spec.getServerTypeString());
+		}
+
+		if (sendDigest) {
+			String digestStr = digestFile(file, fileType, charset);
+			if (digestStr != null) {
+				digests.put(fileName, digestStr);
+			}
+		}
+	}
+
+	/**
 	 * Recursively (optional) traverse the directory tree for files.
 	 * <p>
 	 * Check MapApi; if no mapping, continue.
@@ -655,17 +776,19 @@ public class ClientSystemFileMatchCommands {
 	 * @param traverse    traverse
 	 * @param skipIgnore  skipIgnore
 	 * @param sendDigest  sendDigest
+	 * @param sendType    sendType
 	 * @param map         map
 	 * @param addFilesMap addFilesMap
 	 * @param sizes       sizes
 	 * @param digests     digests
+	 * @param types       types
 	 * @param hasIndex    hasIndex
 	 * @param skipFiles   skipFiles
 	 * @param unicode     unicode
 	 * @param charset     charset
 	 * @param cmdEnv      cmdEnv
 	 */
-	private void traverseDirs(File file, boolean traverse, boolean skipIgnore, boolean sendDigest, MapTable map, List<String> addFilesMap, Map<String, Long> sizes, Map<String, String> digests, int hasIndex, List<String> skipFiles, boolean unicode, Charset charset, CommandEnv cmdEnv) {
+	private void traverseDirs(File file, boolean traverse, boolean skipIgnore, boolean sendDigest, boolean sendType, MapTable map, List<String> addFilesMap, Map<String, Long> sizes, Map<String, String> digests, Map<String, String> types, int hasIndex, List<String> skipFiles, boolean unicode, Charset charset, CommandEnv cmdEnv) {
 
 		if (addFilesMap == null) {
 			throw new IllegalArgumentException("Must pass in a non-null 'files' list as a parameter.");
@@ -685,14 +808,7 @@ public class ClientSystemFileMatchCommands {
 
 		if (file.isFile()) {
 			if (skipIgnore || !isIgnore(file, charset, cmdEnv)) {
-				addFilesMap.add(file.getAbsolutePath());
-				sizes.put(file.getAbsolutePath(), file.length());
-				if (sendDigest) {
-					String digestStr = digestFile(file, RpcPerforceFileType.FST_BINARY, charset);
-					if (digestStr != null) {
-						digests.put(file.getAbsolutePath(), digestStr);
-					}
-				}
+				setDigestOrType(file, skipIgnore, sendDigest, sendType, charset, cmdEnv, addFilesMap, sizes, digests, types);
 			}
 			return;
 		}
@@ -702,14 +818,7 @@ public class ClientSystemFileMatchCommands {
 
 		if (file.isDirectory() && RpcPerforceFileType.isProbablySymLink(file)) {
 			if (skipIgnore || !isIgnore(file, charset, cmdEnv)) {
-				addFilesMap.add(file.getAbsolutePath());
-				sizes.put(file.getAbsolutePath(), file.length());
-				if (sendDigest) {
-					String digestStr = digestFile(file, RpcPerforceFileType.FST_BINARY, charset);
-					if (digestStr != null) {
-						digests.put(file.getAbsolutePath(), digestStr);
-					}
-				}
+				setDigestOrType(file, skipIgnore, sendDigest, sendType, charset, cmdEnv, addFilesMap, sizes, digests, types);
 			}
 			return;
 		}
@@ -774,18 +883,11 @@ public class ClientSystemFileMatchCommands {
 					}
 
 					if (skipIgnore || !isIgnore(f, charset, cmdEnv)) {
-						addFilesMap.add(fileName);
-						sizes.put(fileName, file.length());
-						if (sendDigest) {
-							String digestStr = digestFile(f, RpcPerforceFileType.FST_BINARY, charset);
-							if (digestStr != null) {
-								digests.put(fileName, digestStr);
-							}
-						}
+						setDigestOrType(f, skipIgnore, sendDigest, sendType, charset, cmdEnv, addFilesMap, sizes, digests, types);
 					}
 				} else if (traverse) {
 					// Recursive call
-					traverseDirs(f, traverse, skipIgnore, sendDigest, map, addFilesMap, sizes, digests, hasIndex, skipFiles, unicode, charset, cmdEnv);
+					traverseDirs(f, traverse, skipIgnore, sendDigest, sendType, map, addFilesMap, sizes, digests, types, hasIndex, skipFiles, unicode, charset, cmdEnv);
 				}
 			} else { // File
 				String from = fileName;
@@ -806,14 +908,7 @@ public class ClientSystemFileMatchCommands {
 				}
 
 				if (skipIgnore || !isIgnore(f, charset, cmdEnv)) {
-					addFilesMap.add(fileName);
-					sizes.put(fileName, file.length());
-					if (sendDigest) {
-						String digestStr = digestFile(f, RpcPerforceFileType.FST_BINARY, charset);
-						if (digestStr != null) {
-							digests.put(fileName, digestStr);
-						}
-					}
+					setDigestOrType(f, skipIgnore, sendDigest, sendType, charset, cmdEnv, addFilesMap, sizes, digests, types);
 				}
 			}
 		}
@@ -822,7 +917,7 @@ public class ClientSystemFileMatchCommands {
 	private String digestFile(File file, RpcPerforceFileType fileType, Charset charset) {
 
 		MD5Digester digester = new MD5Digester();
-		RpcPerforceFile pFile = new RpcPerforceFile(file.getName(), fileType);
+		RpcPerforceFile pFile = new RpcPerforceFile(file.getAbsolutePath(), fileType);
 
 		// Digest the file using the configured local file content
 		// charset. A null digestCharset specified will cause the
@@ -1203,4 +1298,33 @@ public class ClientSystemFileMatchCommands {
 		return this.checker;
 	}
 
+	/**
+	 * Return the matching number of lines between the sequence toFile and fromFile using DiffAnalyze
+	 *
+	 * @param toFile
+	 * @param fromFile
+	 * @param diffFlags
+	 * @param fromFilePath
+	 * @param charset
+	 * @param type
+	 * @return
+	 * @throws ConnectionException
+	 */
+	private static int diffMatchFiles(Sequence toFile, Sequence fromFile, DiffFlags diffFlags, String fromFilePath, Charset charset, String type) throws ConnectionException {
+		int same = 0;
+		try (Sequence fromSequence = new Sequence(fromFile, diffFlags)) {
+			fromSequence.Reuse(new RpcPerforceFile(fromFilePath, type), charset);
+
+			DiffAnalyze diff = new DiffAnalyze(fromSequence, toFile);
+
+			Snake snakeDiff = diff.GetSnake();
+			while (snakeDiff != null) {
+				same += (snakeDiff.u.get() - snakeDiff.x.get());
+				snakeDiff = snakeDiff.next;
+			}
+		} catch (Exception e) {
+			// throw new ConnectionException("Exception in DiffMatchFiles : " + e);
+		}
+		return same;
+	}
 }

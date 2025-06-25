@@ -91,4 +91,25 @@ public interface IMoveDelegator {
 			@Nonnull IFileSpec fromFile,
 			@Nonnull IFileSpec toFile,
 			@Nullable MoveFileOptions opts) throws P4JavaException;
+
+	/**
+	 * Move by default takes an already opened file and moves it from one
+	 * client location to another, reopening it as a pending depot move.
+	 * When the file is submitted with 'p4 submit', its depot file is moved
+	 * accordingly. The 'p4 move' command is intended for moves that occur
+	 * within the same branch and not for restructuring the depot by moving
+	 * an entire branch.
+	 * <p>
+	 * Note that this operation is not supported on servers earlier than 2025.1;
+	 * any attempt to use this on earlier servers will result in a
+	 * RequestException with a suitable message.
+	 *
+	 * @param opts     MoveFileOptions object describing optional parameters; if
+	 *                 null, no options are set.
+	 * @return list of IFileSpec objects representing the results of this move.
+	 * @throws P4JavaException if any error occurs in the processing of this method.
+	 */
+	List<IFileSpec> moveFile(
+        @Nullable MoveFileOptions opts)
+			throws P4JavaException;
 }

@@ -124,6 +124,7 @@ public class RpcFunctionMapKey {
 	public static final String LOWER = "lower";
 	public static final String MANGLE = "mangle";
 	public static final String MAP_TABLE = "mapTable";
+	public static final String MATCHLINES = "matchlines";
 	public static final String MERGE_AUTO = "mergeAuto";
 	public static final String MERGE_CONFIRM = "mergeConfirm";
 	public static final String MERGE_DECLINE = "mergeDecline";
@@ -207,6 +208,8 @@ public class RpcFunctionMapKey {
 	public static final String RUSERRESULT = "rUserResult";
 	public static final String SCANSIZE = "scanSize";
 	public static final String SEND_DIGEST = "sendDigest";
+	public static final String SEND_FILESIZE = "sendFileSize";
+	public static final String SEND_TYPE = "sendType";
 	public static final String SERVER = "server";
 	public static final String SERVER2 = "server2";
 	public static final String SERVERADDRESS = "serverAddress";
@@ -239,6 +242,7 @@ public class RpcFunctionMapKey {
 	public static final String SYNCTIME = "syncTime";
 	public static final String TAG = "tag";
 	public static final String THEIRNAME = "theirName";
+	public static final String THREADS = "threads";
 	public static final String TICKET = "ticket";
 	public static final String TIME = "time";
 	public static final String TO_FILE = "toFile";

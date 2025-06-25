@@ -2327,6 +2327,12 @@ public abstract class Server extends HelixCommandExecutor implements IServerCont
 	}
 
 	@Override
+	public List<IFileSpec> moveFile(@Nullable MoveFileOptions opts) throws P4JavaException {
+
+		return moveDelegator.moveFile(opts);
+	}
+
+	@Override
 	public List<IObliterateResult> obliterateFiles(@Nonnull final List<IFileSpec> fileSpecs, final ObliterateFilesOptions opts) throws P4JavaException {
 
 		return obliterateDelegator.obliterateFiles(fileSpecs, opts);

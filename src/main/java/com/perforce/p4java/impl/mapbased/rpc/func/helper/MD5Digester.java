@@ -45,6 +45,7 @@ public class MD5Digester {
 	private int bufferSize = 1024 * 8;
 
 	private MessageDigest messageDigest = null;
+	private long byteCount = 0;
 
 	public MD5Digester() throws P4JavaError {
 		try {
@@ -100,11 +101,13 @@ public class MD5Digester {
 
 	public void reset() {
 		messageDigest.reset();
+		byteCount = 0;
 	}
 
 	public void update(byte[] bytes, int off, int len) {
 		if (nonNull(bytes)) {
 			messageDigest.update(bytes, off, len);
+			byteCount += len;
 		}
 	}
 
@@ -351,5 +354,9 @@ public class MD5Digester {
 		if (nonNull(bytes)) {
 			messageDigest.update(bytes);
 		}
+	}
+
+	public long getByteCount() {
+		return this.byteCount;
 	}
 }

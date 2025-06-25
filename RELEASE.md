@@ -1,11 +1,11 @@
                             Release Notes for
-                       P4Java, the Perforce Java API
+                         P4Java, P4 API for Java
 
-                              Version 2024.2
+                              Version 2025.1
 
 Introduction
 
-	P4Java is a Java-native API for accessing Perforce SCM
+	P4Java is a Java-native API for accessing P4 SCM
 	services from within Java applications, servlets, plugins,
 	and other Java contexts.
 
@@ -18,23 +18,37 @@ Introduction
 
 	Please send all feedback to support@perforce.com
 
+--------------------------------------------------------------------------
+
+Important Product Rebrand Notice
+
+    Helix Core is now P4
+    Perforce has a new look and logo that reflects our place in DevOps
+    workflows. As part of these changes, Helix Core is now P4. Name updates
+    and new icons to align with the P4 branding will be rolled out soon.
+    To learn more, see:
+        https://www.perforce.com/blog/vcs/introducing-the-P4-platform
+
+--------------------------------------------------------------------------
+
 Requirements
 
-	* Perforce server at Release 2021.1 or higher.
+	* This release of P4Java supports the 2025.1 P4 Server. Older releases 
+	  might work but are not supported.
 
 	* Java: full standard JDK 11 or later.  Implementation as
 	  discussed in "Known Limitations" below.
 
 	* SSL: unlimited strength JCE (Java Cryptography Extension) package for
-	  256-bit encryption level SSL connection to a secure Perforce server.
+	  256-bit encryption level SSL connection to a secure P4 server.
 
 SSL and Trust
 
-	Perforce server 2021.1 or higher supports 256-bit SSL connections
+	P4 server 2021.1 or higher supports 256-bit SSL connections
 	and trust establishment via accepting the fingerprint of the SSL
 	certificate's public key. The standard JDK comes with 128-bit
 	encryption level ciphers. In order to use P4Java to connect to
-	a secure Perforce server, you must download and install the
+	a secure P4 server, you must download and install the
 	unlimited strength JCE package for your JDK version.
 
 	To make a secure connection using P4Java, simply append 'ssl'
@@ -43,7 +57,7 @@ SSL and Trust
 	trust using the IOptionsServer's 'addTrust' method. See example
 	code snippet below:
 
-	// Create a P4Java SSL connection to a secure Perforce server
+	// Create a P4Java SSL connection to a secure P4 server
 	try {
 	    String serverUri = "p4javassl://perforce:1667";
 	    Properties props = null;
@@ -60,7 +74,7 @@ SSL and Trust
 	}
 
 	P4Java 2020.1 has changed the default TLS support to TLSv1.2 for use 
-	with Perforce server 2019.1 or greater this can	be modified using the
+	with P4 server 2019.1 or greater this can be modified using the
 	JVM option:
 
 	    java -DsecureSocketEnabledProtocols=TLSv1.2 
@@ -98,21 +112,21 @@ Known Limitations
 	  correctly on the platforms listed above under "Requirements".
 
 	* P4Java can not reliably be used in Unicode contexts where files
-	  have been added to a Perforce server as "shiftjis" when they are
+	  have been added to a P4 server as "shiftjis" when they are
 	  in fact CP932 (or MS932) encoded, and vice-versa. The usual
 	  symptoms of this problem include being unable to sync or submit
 	  affected files, with an error message that includes the string
 	  "Translation of file content failed". This is a known problem due
 	  to the inability to define a robust round-trip encoding / decoding
 	  between these encodings and the inaccurate use of "shiftjis" to
-	  mean either true shift-jis or CP932 by the Perforce server and
+	  mean either true shift-jis or CP932 by the P4 server and
 	  many Windows tools. There is currently no workaround known.
 
-	* The Perforce server (2021.1 or higher) only support 256-bit
+	* The P4 server (2021.1 or higher) only support 256-bit
 	  encryption.  Due to current US export control restrictions
 	  for some countries, the standard JDK package only comes with
 	  128-bit encryption level ciphers.  In order to use P4Java to
-	  connect to a secure Perforce server, those living in eligible
+	  connect to a secure P4 server, those living in eligible
 	  countries may download the unlimited strength JCE (Java
 	  Cryptography Extension) version and replace the current
 	  default cryptography jar files with the unlimited strength
@@ -122,6 +136,30 @@ Known Limitations
 	  <java-home>/lib/security/US_export_policy.jar
 	  
 	* P4Java would not support file operations on altsync enabled clients.
+
+-------------------------------------------
+Updates in 2025.1 (2025.1/2785811) (2025/06/24)
+
+	#2772096 (Job #125523)
+	    Added support of move match detection using multiple threads in
+	    "p4 move" command
+
+	#2770906 (Job #125805)
+	    Added support of move match detection using multiple threads in 
+	    "p4 reconcile" command
+
+	#2766066 (Job #127060)
+	    Fixed a bug in p4 resolve -am to add network errors to the file path
+
+	#2764407 (Job #125107)
+	    Added support to --sync-time option
+
+	#2764369, #2764794 (Job #125781)
+	    Added support for P4D 2025.1
+
+	#2744711 (Job #125654)
+	    Fixed a bug in undoFile which always checks out files for delete regardless 
+	    of the file's original file action
 
 -------------------------------------------
 Updates in 2024.2 (2024.2/2695691) (2024/12/13)
@@ -190,6 +228,13 @@ Updates in 2024.1 (2024.1/2612262) (2024/06/12)
 
 	#2597531 (Job #112324)
 	    Fixed inconsistent handling of quotes in ViewMap for Label.
+
+-------------------------------------------
+Updates in 2023.2 Patch 2 (2023.2/2746548) (2025/04/09)
+
+	#2743446 (Job #124765)
+	    Fixed behaviour of item being 0 bytes after detection of conflict when
+	    synced through proxy.
 
 -------------------------------------------
 Updates in 2023.2 Patch 1 (2023.2/2581742) (2024/04/05)

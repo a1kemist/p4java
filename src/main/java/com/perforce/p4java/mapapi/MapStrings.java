@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Mapstrings.h - mapping table intial substrings
+ * Mapstrings.h - MapTable substrings
  * <p>
  * Public Classes:
  * <p>
@@ -26,20 +26,25 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class MapStrings extends ArrayList<MapStrings.MapString> {
 
 	public class MapString {
-		boolean hasSubDirs;    // Subdirs after wildcard?
-		MapHalf mapHalf;    // actual mapHalf
+		public boolean hasSubDirs;    // Subdirs after wildcard?
+		public MapHalf mapHalf;    // actual mapHalf
 
 		MapString(MapHalf mapHalf, boolean hasSubDirs) {
 			this.hasSubDirs = hasSubDirs;
 			this.mapHalf = mapHalf;
 		}
+
+		@Override
+		public String toString() {
+			return this.mapHalf.toString();
+		}
 	}
 
-	void add(MapHalf mapHalf, boolean hasSubDirs) {
+	public void add(MapHalf mapHalf, boolean hasSubDirs) {
 		add(new MapString(mapHalf, hasSubDirs));
 	}
 
-	void dump(StringBuffer out) {
+	public void dump(StringBuffer out) {
 
 		if (out == null) {
 			System.out.print("strings for map:\n");
@@ -59,10 +64,18 @@ public class MapStrings extends ArrayList<MapStrings.MapString> {
 		}
 	}
 
-	void get(int n, MapHalf string, AtomicBoolean hasSubDirs) {
+	public void get(int n, MapHalf string, AtomicBoolean hasSubDirs) {
 		MapString ms = get(n);
 		string.set(ms.mapHalf.get());
 		hasSubDirs.set(ms.hasSubDirs);
+	}
+
+	public String[] toArray() {
+		ArrayList<String> strings = new ArrayList<>();
+		for (int i = 0; i < this.size(); i++) {
+			strings.add(this.get(i).toString());
+		}
+		return strings.toArray(new String[0]);
 	}
 };
 

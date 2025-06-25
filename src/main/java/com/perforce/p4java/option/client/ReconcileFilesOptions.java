@@ -17,9 +17,9 @@ import java.util.List;
 public class ReconcileFilesOptions extends Options {
 
 	/**
-	 * Options: -n, -c[changelist], -e, -a, -f, -I, -d, -l, -m, -t, -w
+	 * Options: -n, -c[changelist], -e, -a, -f, -I, -d, -l, -m, -t, -w, -M [--parallel=N]
 	 */
-	public static final String OPTIONS_SPECS = "b:n i:c:gtz b:e b:a b:f b:I b:d b:l b:m b:t b:w";
+	public static final String OPTIONS_SPECS = "b:n i:c:gtz b:e b:a b:f b:I b:d b:l b:m b:t b:w b:M i:-parallel:gtz";
 
 	/**
 	 * If true, don't actually do the add, just return the files that
@@ -106,6 +106,22 @@ public class ReconcileFilesOptions extends Options {
 	protected boolean updateWorkspace = false;
 
 	/**
+	 * If true, the list of files to be opened includes both adds and deletes,
+	 * 	allowing the missing and added files to be compared and
+	 * 	converted to pairs of move/delete and move/add operations if they
+	 * 	are similar enough. Corresponds to the '-M' flag.
+	 */
+	protected boolean moveMatch = false;
+
+	/**
+	 * 	The --parallel flag when used with the -M flag specifies the number
+	 * 	of files opened for add to be compared simultaneously on the client
+	 * 	to the file opened for delete to improve the performance of the move
+	 * 	matching.
+	 */
+	protected int parallel = 0;
+
+	/**
 	 * Default constructor.
 	 */
 	public ReconcileFilesOptions() {
@@ -157,13 +173,13 @@ public class ReconcileFilesOptions extends Options {
 		this.noIgnoreChecking = noIgnoreChecking;
 		this.removed = removed;
 		this.localSyntax = localSyntax;
-	}
+	} 
 
 	/**
 	 * @see com.perforce.p4java.option.Options#processOptions(com.perforce.p4java.server.IServer)
 	 */
 	public List<String> processOptions(IServer server) throws OptionsException {
-		this.optionList = this.processFields(OPTIONS_SPECS, this.noUpdate, this.changelistId, this.outsideEdit, this.outsideAdd, this.useWildcards, this.noIgnoreChecking, this.removed, this.localSyntax, this.checkModTime, this.fileType, this.updateWorkspace);
+		this.optionList = this.processFields(OPTIONS_SPECS, this.noUpdate, this.changelistId, this.outsideEdit, this.outsideAdd, this.useWildcards, this.noIgnoreChecking, this.removed, this.localSyntax, this.checkModTime, this.fileType, this.updateWorkspace, this.moveMatch, this.parallel);
 		return this.optionList;
 	}
 
@@ -265,4 +281,22 @@ public class ReconcileFilesOptions extends Options {
 		this.updateWorkspace = updateWorkspace;
 		return this;
 	}
+
+	public boolean isMoveMatch() {
+		return moveMatch;
+	}
+
+	public ReconcileFilesOptions setMoveMatch(boolean moveMatch) {
+		this.moveMatch = moveMatch;
+		return this;
+	}
+
+	public int getParallel() {
+		return parallel;
+	}
+
+	public ReconcileFilesOptions setParallel(int parallel) {
+		this.parallel = parallel;
+        return this;
+    }
 }

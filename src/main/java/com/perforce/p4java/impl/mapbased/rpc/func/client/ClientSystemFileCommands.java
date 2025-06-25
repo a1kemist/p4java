@@ -26,6 +26,7 @@ import com.perforce.p4java.impl.mapbased.rpc.connection.RpcConnection;
 import com.perforce.p4java.impl.mapbased.rpc.func.RpcFunctionMapKey;
 import com.perforce.p4java.impl.mapbased.rpc.func.RpcFunctionSpec;
 import com.perforce.p4java.impl.mapbased.rpc.func.client.ClientMessage.ClientMessageId;
+import com.perforce.p4java.impl.mapbased.rpc.func.helper.DigestResult;
 import com.perforce.p4java.impl.mapbased.rpc.handles.ClientFile;
 import com.perforce.p4java.impl.mapbased.rpc.msg.RpcMessage;
 import com.perforce.p4java.impl.mapbased.rpc.packet.RpcPacket;
@@ -50,6 +51,8 @@ import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.UnmappableCharacterException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -275,7 +278,7 @@ public class ClientSystemFileCommands {
 			cfile.setArgs(resultsMap);
 			cfile.setModTime(modTime);
 
-			if (clientHandle.equals("sync")) {
+			if (clientHandle.equals("sync") || (cmdEnv.getCmdSpec().getCmdName().equals("sync") && clientHandle.equals("fault"))) {
 				handler.setError(false);
 			}
 
@@ -300,7 +303,7 @@ public class ClientSystemFileCommands {
 
 				cfile.MakeGlobalTemp();
 
-				if (function.equalsIgnoreCase(RpcFunctionSpec.CLIENT_OPENMATCH.toString())) {
+				if (f.equals(RpcFunctionSpec.CLIENT_OPENMATCH)) {
 					fileMatchCommands.openMatch(rpcConnection, cmdEnv, resultsMap, cfile);
 				}
 			} else {
@@ -420,6 +423,11 @@ public class ClientSystemFileCommands {
 			boolean useLocalDigester = digestType == null && digest != null && !cmdEnv.isNonCheckedSyncs() && !cfile.isSymlink();
 			if (useLocalDigester) {
 				cfile.setServerDigest(digest);
+			}
+
+			if (!Files.exists(Path.of(cfile.getFile().getParent()))) {
+				Files.createDirectories(Path.of(cfile.getFile().getParent()));
+				handler.setTmpDir(true);
 			}
 
 			cfile.createStream(useLocalDigester, rpcConnection, digest);
@@ -1484,6 +1492,12 @@ public class ClientSystemFileCommands {
 		String scanSize = (String) resultsMap.get(RpcFunctionMapKey.SCANSIZE);
 		String checkLinks = (String) resultsMap.get(RpcFunctionMapKey.CHECKLINKS);
 		String checkLinksNs = (String) resultsMap.get(RpcFunctionMapKey.CHECKLINKSN);
+		String sendFileSize = (String) resultsMap.get(RpcFunctionMapKey.SEND_FILESIZE);
+
+		if(sendFileSize == null && fileSize != null) {
+			resultsMap.remove(RpcFunctionMapKey.FILESIZE);
+		}
+
 		int checkLinksN = 0;
 		try {
 			checkLinksN = checkLinksNs != null ? Integer.valueOf(checkLinksNs) : 0;
@@ -1577,6 +1591,8 @@ public class ClientSystemFileCommands {
 
 		RpcPerforceFileType fileType = null;
 		boolean fstSymlink = false;
+		DigestResult digestResult = null;
+		String digestStr = null;
 
 		if (clientType != null) {
 			RpcPerforceFile file = new RpcPerforceFile(clientPath, clientType);
@@ -1589,14 +1605,18 @@ public class ClientSystemFileCommands {
 			 * it is the same.
 			 */
 
+			digestResult = rpcConnection.getDigestAndSizeOfFile(fileType, file);
 			if (!RpcPerforceFile.fileExists(file, fstSymlink)) {
 				status = "missing";
 			} else if (digest != null) {
 				// Calculate actual file digest; if same, we assume the file's the same as on the server.
-				String digestStr = rpcConnection.getDigest(fileType, file);
+				digestStr = digestResult.getDigest();
 				if ((digestStr != null) && digestStr.equals(digest)) {
 					status = "same";
 				}
+			}
+			if (sendFileSize == null) {
+				fileSize = String.valueOf(digestResult.getFileSize());
 			}
 		} else {
 			int scan = -1;
@@ -1611,6 +1631,12 @@ public class ClientSystemFileCommands {
 			File file = new File(clientPath);
 			fileType = RpcPerforceFileType.inferFileType(file, scan, cmdEnv.getRpcConnection().isUnicodeServer(), cmdEnv.getRpcConnection().getClientCharset());
 			fstSymlink = (fileType == RpcPerforceFileType.FST_SYMLINK);
+			fileSize = String.valueOf(file.length());
+
+			if(fileType!=RpcPerforceFileType.FST_BINARY && sendFileSize!=null) {
+				digestResult = rpcConnection.getDigestAndSizeOfFile(fileType, file);
+				fileSize = String.valueOf(digestResult.getFileSize());
+			}
 
 			if (!RpcPerforceFile.fileExists(file, fstSymlink)) {
 				status = "missing";
@@ -1660,6 +1686,8 @@ public class ClientSystemFileCommands {
 
 		respMap.put(RpcFunctionMapKey.TYPE, nType);
 		respMap.put(RpcFunctionMapKey.STATUS, status);
+		if (sendFileSize != null && !"0".equalsIgnoreCase(fileSize))
+			respMap.put(RpcFunctionMapKey.FILESIZE, fileSize);
 
 		for (Map.Entry<String, Object> entry : resultsMap.entrySet()) {
 			if ((entry.getKey() != null) && !entry.getKey().equalsIgnoreCase(RpcFunctionMapKey.FUNCTION) && !entry.getKey().equalsIgnoreCase(RpcFunctionMapKey.TYPE) && !entry.getKey().equalsIgnoreCase(RpcFunctionMapKey.STATUS)) {

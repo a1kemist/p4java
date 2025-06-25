@@ -1189,6 +1189,34 @@ public interface IClient extends IClientSummary, IWhereDelegator {
 	 * <p>
 	 * By default, the files matching each condition above in the path are reconciled
 	 * by opening files for delete (scenario 1), add (scenario 2), and/or edit (scenario 3).
+	 * No file arguments are given here, hence, reconcile and status default to the current
+	 * working directory.
+	 *
+	 * @param opts      possibly-null ReconcileFilesOptions object specifying method options.
+	 * @return a non-null but possibly-empty list of IFileSpec objects
+	 * representing the opened files. Not all fields in these specs
+	 * will be valid or set.
+	 * @throws P4JavaException if an error occurs processing this method and its parameters
+	 * @see com.perforce.p4java.option.client.ReconcileFilesOptions
+	 * @since 2025.1
+	 */
+    List<IFileSpec> reconcileFiles(ReconcileFilesOptions opts) throws P4JavaException;
+
+	/**
+	 * Open files for add, delete, and/or edit to reconcile client with workspace
+	 * changes made outside of Perforce.
+	 * <p>
+	 * 'p4 reconcile' finds unopened files in a client's workspace and detects the
+	 * following:
+	 * <p>
+	 * 1. files in depot missing from workspace, but still on have list.
+	 * <p>
+	 * 2. files on workspace that are not in depot.
+	 * <p>
+	 * 3. files modified in workpace that are not opened for edit.
+	 * <p>
+	 * By default, the files matching each condition above in the path are reconciled
+	 * by opening files for delete (scenario 1), add (scenario 2), and/or edit (scenario 3).
 	 * The -e, -a, and -d flags may be used to limit to a subset of these operations.
 	 * If no file arguments are given, reconcile and status default to the current
 	 * working directory.

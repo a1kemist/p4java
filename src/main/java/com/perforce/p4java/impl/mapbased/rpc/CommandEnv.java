@@ -63,6 +63,7 @@ public class CommandEnv {
 		private boolean error = false;
 		private File file = null;
 		private Map<String, Object> map = null;
+    	private boolean tmpDirCreated = false;
 
 		public RpcHandler(String name, boolean error, File file) {
 			this.name = name;
@@ -109,6 +110,14 @@ public class CommandEnv {
 
 		public void setMap(Map<String, Object> map) {
 			this.map = map;
+		}
+
+		public void setTmpDir(boolean tmpDirCreated) {
+			this.tmpDirCreated = tmpDirCreated;
+		}
+
+		public boolean isTmpDirCreated () {
+			return this.tmpDirCreated;
 		}
 	}
 

@@ -55,6 +55,38 @@ public enum RpcPacketFieldType {
 				return BINARY;
 			} else if (fieldName.startsWith(RpcFunctionMapKey.ATTR_PREFIX)) {
 				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.ROPTAUTO)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.ROPTHELP)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.ROPTMERGE)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.ROPTSKIP)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.ROPTTHEIRS)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.ROPTYOURS)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.RPROMPTMERGE)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.RPROMPTTHEIRS)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.RPROMPTYOURS)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.RPROMPTTYPE)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.RUSERERROR)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.RUSERHELP)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.RACTIONTYPE)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.RACTIONTHEIRS)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.RACTIONTHEIRS)) {
+				return BINARY;
+			} else if (fieldName.equalsIgnoreCase(RpcFunctionMapKey.RUSERPROMPT)) {
+				return BINARY;
 			} else {
 				return TEXT;
 			}
